@@ -3,10 +3,13 @@
 # - It can be extended in order to perform comparative analysis, simulations, etc.
 from os import path, getenv
 import sys
+# This path would need to be updated to a more stable location
 SBCPATH = path.join(getenv('HOME'), 'mibsspc2', 'synbiochemdb_scripts')
 sys.path.insert(0, SBCPATH)
 import sbcpsql
 import cobra
+import copy
+import re
 
 def parse_equation(eq):
     d = []
@@ -84,6 +87,27 @@ class Path:
             del stoi[c]
         self.stoi = stoi
 
+    def map_rxdb(self, db='bigg'):
+        self.rlistdb = {}
+        for r in self.rlist:
+            rx = r
+            for ri in self.sbcdb.rxrefreac[r]:
+                if ri.startswith(db):
+                    rx = re.sub(db+':', ri, '')
+                    break
+            self.rlistdb[rx] = copy.deepcopy(self.rlist[r])
+            for cc in ['subs', 'prods']:
+                self.rlistdb[rx][cc] = []
+                for c in self.rlist[r][cc]:
+                    cx = c
+                    for ci in self.sbcdb.rxrefchem[c[1]]:
+                        if ci.startswith(db):
+                            cx = re.sub(db+':', ci, '')
+                            break
+                    self.rlistdb[rx][cc].append((c[0], cx))
+            
+            
+
     def map_stoi(self, db='bigg'):
         mstoi = {}
         for c in stoi:
@@ -111,10 +135,26 @@ def import_model(modelfile, format='JSON'):
 # Import the pathway
 def import_pathway(pathfile):
     p = Path()
-    # Basic format: reaction_id, enzyme_id
+    # Basic format: reaction_id, direction, reversibility, enzyme_id (optional)
     for l in open(pathfile):
+        if l.startswith('#'):
+            continue
         m = l.rstrip().split()
-        p.add_reaction(m[0], {'sequence': m[1]})
+        reaction = m[0]
+        direction = 1
+        reversibility = 0
+        enzyme_id = 'e_'+reaction
+        try:
+            direction = m[1]
+            reversibility = m[2]
+        except:
+            pass
+        try:
+            enzyme_id = m[3]
+        except:
+            pass
+        p.add_reaction(reaction, {'sequence': enzyme_id})
         
     return p
         
+
