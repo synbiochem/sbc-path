@@ -54,6 +54,49 @@ def find_cid(cid, cx):
 def remove_compartment(cid, compartment='c'):
     return re.sub('_'+compartment, '', cid)
 
+
+def new_metabolite(mid, formula, name, compartment):
+    # Create the metabolites
+    met = cobra.Metabolite(mid, formula=formula,
+                     name=name, compartment=compartment)
+    return(met)
+
+def new_reaction(rid, name, react, subsys='SYNBIOCHEM', rev=0, obj=0.0, lb=0, ub=9999):
+    metab = {}
+    for x in react['subs']:
+        if x[2] not in metab:
+            metab[x[2]] = 0
+        try:
+            metab[x[2]] -= float(x[0])
+        except:
+            pass
+    for x in react['prods']:
+        if x[2] not in metab:
+            metab[x[2]] = 0
+        try:
+            metab[x[2]] += float(x[0])
+        except:
+            pass
+    rm = set()
+    for c in metab:
+        if metab[c] == 0:
+            rm.add(c)
+    for c in rm:
+        del metab[c]
+    if rev != 0:
+        lb = -99999
+    reaction = cobra.Reaction(rid) # 'my_new_reaction'
+    reaction.name = name #'3 oxoacyl acyl carrier protein synthase n C140'
+    reaction.subsystem = subsys #'Cell Envelope Biosynthesis'
+    reaction.lower_bound = lb  # This is the default
+    reaction.upper_bound = ub  # This is the default
+#    reaction.reversibility = rev  # This is the default
+    reaction.objective_coefficient = obj  # This is the default
+    reaction.add_metabolites(metab)
+#    print rid,reaction.reaction
+    return reaction
+
+
 class Path:
     
 
@@ -101,7 +144,12 @@ class Path:
                                 stats['mdbl'].add(cx)
                             break
                     stats['ml'].add(cx)
-                    self.rlistchassis[rx][cc].append((c[0], cx))
+                    if cx not in self.chassis.metabolites:
+                        met = new_metabolite(cx, formula=None, name=cx, compartment=self.rlistchassis[rx]['compartment'])
+                        self.chassis.add_metabolites([met])
+                    self.rlistchassis[rx][cc].append((c[0], cx, getattr(self.chassis.metabolites, cx)))
+            nrx = new_reaction(rx, rx, self.rlistchassis[rx])
+            self.chassis.add_reaction(nrx)
         self.message(['Reactions:', len(self.rlist), 'Metabolites:', len(stats['ml']),
                       'New metabolites:', len(stats['ml'] - stats['mdbl'])])
             
@@ -229,3 +277,5 @@ def ptest():
     p.add_chassis('../../data/strains/iAF1260.json')
     p.add_path('limonene.path')
     p.map_path_chassis()
+    # TO DO: add transport for all new metabolites
+    return p
