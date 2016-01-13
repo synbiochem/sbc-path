@@ -1,0 +1,10 @@
+# Reaction direction, reversibility, compartment, sequence
+MNXR341 1 1 c S1
+MNXR2982 -1 1 c S2
+MNXR2981 1 1 c S3
+MNXR3507 -1 1 c S4
+MNXR69766 1 1 c S5
+MNXR68753 -1 1 c S6
+MNXR69289 1 1 c S7
+MNXR55238 -1 1 c S8
+MNXR70692 -1 0 c S9

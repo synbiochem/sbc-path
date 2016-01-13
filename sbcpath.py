@@ -33,18 +33,105 @@ def parse_equation(eq):
         d.append(c)
     return d
         
+# Find bigg metabolite in list
+def find_cid(cid, cx):
+    if cid in cx:
+        return cx[cid]
+    else:
+        cid = re.sub('__', '_', cid)
+        m = cid.split('_')
+        cid1 = '_'.join(m[0:(len(m)-1)])
+        cid2 = '-'.join(m[0:(len(m)-1)])
+        if cid1 == 'sertrna_sec':
+            cid1 = 'sertrna(sec)'
+            return cx[cid1]
+        if cid1 in cx:
+            return cx[cid1]
+        elif cid2 in cx:
+            return cx[cid2]
+    return None
 
+def remove_compartment(cid, compartment='c'):
+    return re.sub('_'+compartment, '', cid)
 
 class Path:
     
+
     def __init__(self):
         self.rlist = {}
+        self.rlistchassis = {}
         self.precursors = set()
         self.products = set()
         self.sbcdb = sbcpsql.sbcdb()
         self.sbcdb.chem_xref()
         self.sbcdb.reac_xref()
         self.sbcdb.dict_reac()
+        self.chassis = None
+        self.metdb = {}
+        self.dbmet = {}
+
+    def __repr__(self):
+        return str(self.rlist)
+
+
+        
+   # Map metabolites in the pathway into chassis
+    def map_path_chassis(self, db='bigg', map_reaction=False):
+        stats = {'ml': set(), 'mdbl': set()}
+        for r in self.rlist:
+            rx = r
+            # If we map the reactions into the ones in bigg,
+            # then do not add them to the model if they already exist
+            if map_reaction:
+                for ri in self.sbcdb.rxrefreac[r]:
+                    if ri.startswith(db):
+                        rx = re.sub(db+':', '', ri)
+                        break
+            self.rlistchassis[rx] = copy.deepcopy(self.rlist[r])
+            for cc in ['subs', 'prods']:
+                self.rlistchassis[rx][cc] = []
+                for c in self.rlist[r][cc]:
+                    cx = c[1]
+                    # Check if the metabolite is already in the E. coli model
+                    if cx in self.dbmet:
+                        for ci in self.dbmet[cx]:
+                            # in principle only take cytochrome (we may pass this info in the path file)
+                            if ci.endswith('_'+self.rlistchassis[rx]['compartment']):
+                                cx = ci
+                                stats['mdbl'].add(cx)
+                            break
+                    stats['ml'].add(cx)
+                    self.rlistchassis[rx][cc].append((c[0], cx))
+        self.message(['Reactions:', len(self.rlist), 'Metabolites:', len(stats['ml']),
+                      'New metabolites:', len(stats['ml'] - stats['mdbl'])])
+            
+
+
+    def add_path(self, pathfile):
+        # Basic format: reaction_id, direction, reversibility, enzyme_id (optional)
+        for l in open(pathfile):
+            if l.startswith('#'):
+                continue
+            m = l.rstrip().split()
+            reaction = m[0]
+            direction = 1
+            reversibility = 0
+            compartment = 'c'
+            enzyme_id = 'e_'+reaction
+            try:
+                direction = m[1]
+                reversibility = m[2]
+            except:
+                pass
+            try:
+                compartment = m[3]
+            except:
+                pass
+            try:
+                enzyme_id = m[4]
+            except:
+                pass
+            self.add_reaction(reaction, {'sequence': enzyme_id, 'compartment': compartment})
 
 
     # reaction id (it needs to be in the database)
@@ -87,25 +174,6 @@ class Path:
             del stoi[c]
         self.stoi = stoi
 
-    def map_rxdb(self, db='bigg'):
-        self.rlistdb = {}
-        for r in self.rlist:
-            rx = r
-            for ri in self.sbcdb.rxrefreac[r]:
-                if ri.startswith(db):
-                    rx = re.sub(db+':', ri, '')
-                    break
-            self.rlistdb[rx] = copy.deepcopy(self.rlist[r])
-            for cc in ['subs', 'prods']:
-                self.rlistdb[rx][cc] = []
-                for c in self.rlist[r][cc]:
-                    cx = c
-                    for ci in self.sbcdb.rxrefchem[c[1]]:
-                        if ci.startswith(db):
-                            cx = re.sub(db+':', ci, '')
-                            break
-                    self.rlistdb[rx][cc].append((c[0], cx))
-            
             
 
     def map_stoi(self, db='bigg'):
@@ -121,40 +189,43 @@ class Path:
                 mstoi[c] = stoi[c]
         return mstoi
 
-            
 
-# Import the model
-def import_model(modelfile, format='JSON'):
-    if format == 'JSON':
-        return cobra.io.load_json_model(modelfile)
-    elif format == 'SBML':
-        return cobra.io.load_sbml_model(modelfile)        
-    elif format == 'MATLAB':
-        return cobra.io.load_matlab_model(modelfile)
 
-# Import the pathway
-def import_pathway(pathfile):
+    def map_chassis_met_sbcdb(self, db='bigg:'):
+        cnx = {}
+        for x in self.sbcdb.xrefchem:
+            if x.startswith(db):
+                cnx[re.sub(db, '', x)] = self.sbcdb.xrefchem[x]
+        for m in self.chassis.metabolites:
+            cid = remove_compartment(m.id, m.compartment)
+            msbc = find_cid(cid, cnx)
+            if msbc is not None:
+                self.metdb[m.id] = msbc
+                if msbc not in self.dbmet:
+                    self.dbmet[msbc] = set()
+                self.dbmet[msbc].add(m.id)
+        self.message(['Species in chassis:', len(self.chassis.metabolites)])
+        self.message(['Mapped metabolites:',  len(self.dbmet)])
+        self.message(['Missing species', len(self.chassis.metabolites) -len(self.metdb)])
+
+
+    # Before mapping the pathway to the database, we need to declare our chassis
+    def add_chassis(self, modelfile, format='JSON'):
+        if format == 'JSON':
+            self.chassis = cobra.io.load_json_model(modelfile)
+        elif format == 'SBML':
+            self.chassis = cobra.io.load_sbml_model(modelfile)        
+        elif format == 'MATLAB':
+            self.chassis = cobra.io.load_matlab_model(modelfile)
+        self.message(["Chassis", modelfile, "added"])
+        self.map_chassis_met_sbcdb()
+
+        
+    def message(self, l):
+        print ' '.join(map(str, l))
+
+def ptest():
     p = Path()
-    # Basic format: reaction_id, direction, reversibility, enzyme_id (optional)
-    for l in open(pathfile):
-        if l.startswith('#'):
-            continue
-        m = l.rstrip().split()
-        reaction = m[0]
-        direction = 1
-        reversibility = 0
-        enzyme_id = 'e_'+reaction
-        try:
-            direction = m[1]
-            reversibility = m[2]
-        except:
-            pass
-        try:
-            enzyme_id = m[3]
-        except:
-            pass
-        p.add_reaction(reaction, {'sequence': enzyme_id})
-        
-    return p
-        
-
+    p.add_chassis('../../data/strains/iAF1260.json')
+    p.add_path('limonene.path')
+    p.map_path_chassis()
