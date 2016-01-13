@@ -96,6 +96,27 @@ def new_reaction(rid, name, react, subsys='SYNBIOCHEM', rev=0, obj=0.0, lb=0, ub
 #    print rid,reaction.reaction
     return reaction
 
+def add_transport(model, met):
+    mid = met.id
+    midp = met.id+'_p'
+    mide = met.id+'_e'
+    formula = met.formula
+    name = met.name          
+    met_p = new_metabolite(midp, formula, name, compartment='Periplasm')
+    model.add_metabolites(met_p)
+    met_e = new_metabolite(mide, formula, name, compartment='Extra_organism')
+    model.add_metabolites(met_e)
+    stoit = {'subs': {met: 1}, 'prods': {met_p: 1}}
+    r1 = new_reaction(mid+'Ppp',name='Transport',
+                 subsys='SYNBIOCHEM Transport', react=stoit, rev=1)
+    stoit = {'subs': {met_p: -1}, 'prods': {met_e: 1}}
+    r2 = new_reaction(mid+'tex',name='Transport',
+                 subsys='SYNBIOCHEM Transport', react=stoit, rev=1)
+    stoit = {'subs': {met_e: -1}, 'prods':{}}
+    r3 = new_reaction('EX_'+mide,name='Transport',
+                 subsys='SYNBIOCEM Transport', react=stoit, rev=1)
+    model.add_reactions( [r1, r2, r3])
+
 
 class Path:
     
@@ -112,6 +133,7 @@ class Path:
         self.chassis = None
         self.metdb = {}
         self.dbmet = {}
+        self.pathstoi = None
 
     def __repr__(self):
         return str(self.rlist)
@@ -119,7 +141,7 @@ class Path:
 
         
    # Map metabolites in the pathway into chassis
-    def map_path_chassis(self, db='bigg', map_reaction=False):
+    def plug_path_chassis(self, db='bigg', map_reaction=False):
         stats = {'ml': set(), 'mdbl': set()}
         for r in self.rlist:
             rx = r
@@ -198,11 +220,11 @@ class Path:
     # Compute overall path stoichiometry
     def path_stoichiometry(self):
         stoi = {}
-        for r in self.rlist:
+        for r in self.rlistchassis:
             factor = 1.0
             for side in ['subs', 'prods']:
-                factor *= -1 
-                for c in self.rlist[r]['subs']:
+                factor *= -1
+                for c in self.rlistchassis[r][side]:
                     try:
                         n = float(c[0])
                         cmp = c[1]
@@ -212,15 +234,19 @@ class Path:
                     if cmp not in stoi:
                         stoi[cmp] = 0.0
                     stoi[cmp] += factor*n
-        import pdb
-        pdb.set_trace()
         bal = set()
         for c in stoi:
             if stoi[c] == 0:
                 bal.add(c)
         for c in bal:
             del stoi[c]
-        self.stoi = stoi
+        stats = 0
+        for c in stoi:
+            if c not in self.metdb:
+                add_transport(self.chassis, getattr(self.chassis.metabolites, c))
+                stats += 1
+        self.message(['Added transport for metabolites:', stats])
+        self.pathstoi = stoi
 
             
 
@@ -276,6 +302,7 @@ def ptest():
     p = Path()
     p.add_chassis('../../data/strains/iAF1260.json')
     p.add_path('limonene.path')
-    p.map_path_chassis()
-    # TO DO: add transport for all new metabolites
+    p.plug_path_chassis()
+    p.path_stoichiometry()
+    # TO DO: Fix bad mapping like water, etc
     return p
