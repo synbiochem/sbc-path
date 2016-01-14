@@ -1,10 +1,10 @@
-# Reaction direction, reversibility, compartment, sequence
-MNXR341 1 1 c S1
-MNXR2982 -1 1 c S2
-MNXR2981 1 1 c S3
-MNXR3507 -1 1 c S4
-MNXR69766 1 1 c S5
-MNXR68753 -1 1 c S6
-MNXR69289 1 1 c S7
-MNXR55238 -1 1 c S8
-MNXR70692 -1 0 c S9
+# Reaction direction, reversibility, compartment, sequence id, comments
+MNXR341	1	1	c	Q9FD70	Acetyl-CoA acetyltransferase; EfMvaE [Enterococcus faecalis] 
+MNXR2982	-1	1	c	Q9FD71	Hydroxymethylglutaryl-CoA (HMG-CoA) synthase ; EfMvaS [Enterococcus Faecalis] 
+MNXR2981	1	1	c	Q9FD70	HMG-CoA reductase; EfMvaE [Enterococcus faecalis] 
+MNXR3507	-1	1	c	Q9FD54	Mevalonate kinase;  mvaK1 [Streptococcus pneumoniae] 
+MNXR69766	1	1	c	Q9FD52	Phosphomevalonate kinase; mvaK2 [Streptococcus pneumoniae] 
+MNXR68753	-1	1	c	Q9FD53	Diphosphomevalonate decarboxylase; mvaKD [Streptococcus pneumoniae] 
+MNXR69289	1	1	c	Q46822	Isopentenyl diphosphate isomerase;  Idi [E. coli MG1655] 
+MNXR55238	-1	1	c	Q43022	4S-limonene synthase; trMpLS (truncated) [Mentha spicata LS] 
+MNXR70692	-1	0	c	Q8LKJ2	Geranyl diphosphate synthase; trGPPS [Abies grandis] 

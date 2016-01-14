@@ -158,13 +158,15 @@ class Path:
                 for c in self.rlist[r][cc]:
                     cx = c[1]
                     # Check if the metabolite is already in the E. coli model
+#                    if cx == 'MNXM1':
+#                        import pdb
+#                        pdb.set_trace()
                     if cx in self.dbmet:
                         for ci in self.dbmet[cx]:
-                            # in principle only take cytochrome (we may pass this info in the path file)
                             if ci.endswith('_'+self.rlistchassis[rx]['compartment']):
                                 cx = ci
                                 stats['mdbl'].add(cx)
-                            break
+                                break
                     stats['ml'].add(cx)
                     if cx not in self.chassis.metabolites:
                         met = new_metabolite(cx, formula=None, name=cx, compartment=self.rlistchassis[rx]['compartment'])
@@ -182,12 +184,13 @@ class Path:
         for l in open(pathfile):
             if l.startswith('#'):
                 continue
-            m = l.rstrip().split()
+            m = l.rstrip().split('\t')
             reaction = m[0]
             direction = 1
             reversibility = 0
             compartment = 'c'
             enzyme_id = 'e_'+reaction
+            comment = None
             try:
                 direction = m[1]
                 reversibility = m[2]
@@ -201,7 +204,11 @@ class Path:
                 enzyme_id = m[4]
             except:
                 pass
-            self.add_reaction(reaction, {'sequence': enzyme_id, 'compartment': compartment})
+            try:
+                comment = m[5]
+            except:
+                pass
+            self.add_reaction(reaction, {'sequence': enzyme_id, 'compartment': compartment, 'comment': comment})
 
 
     # reaction id (it needs to be in the database)
@@ -240,11 +247,11 @@ class Path:
                 bal.add(c)
         for c in bal:
             del stoi[c]
-        stats = 0
+        stats = set()
         for c in stoi:
             if c not in self.metdb:
                 add_transport(self.chassis, getattr(self.chassis.metabolites, c))
-                stats += 1
+                stats.add(c)
         self.message(['Added transport for metabolites:', stats])
         self.pathstoi = stoi
 
@@ -304,5 +311,13 @@ def ptest():
     p.add_path('limonene.path')
     p.plug_path_chassis()
     p.path_stoichiometry()
-    # TO DO: Fix bad mapping like water, etc
+    # TO DO: routine that verifies that a pathway is viable
+    # for r in p.chassis.reactions:
+    #    if r.objective_coefficient != 0:
+    #        x.append(r)
+    # biom = x[0]
+    # biom.objective_coefficient = 0
+    # limon = p.chassis.reactions.get_by_id('MNXR70692')
+    # limon.objective_coefficient = 1
+    # p.chassis.optimize()
     return p
